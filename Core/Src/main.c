@@ -60,6 +60,8 @@
 #include "lwip.h"
 #include "usart.h"
 #include "tftpserver.h"
+#include "gpio.h"
+#include "dma.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN PV */
@@ -77,7 +79,7 @@ uint32_t JumpAddress;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_NVIC_Init(void);
-
+static void RunApplication(void);
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
@@ -92,10 +94,12 @@ static void MX_NVIC_Init(void);
   *
   * @retval None
   */
+//精减LwIP前：							code=55616,RO-data=1068,RW-data=220,ZI-data=27868
+//精减LwIP及HAL_DRIVER后		code=55616,RO-data=1068,RW-data=224,ZI-data=27868
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -116,8 +120,8 @@ int main(void)
 
   /* Initialize all configured peripherals */
 	HAL_Delay(5000);			//waiting
-
-
+  MX_GPIO_Init();
+  MX_DMA_Init();
   //MX_TIM2_Init();
   MX_USART1_UART_Init();
   MX_LWIP_Init();
@@ -130,12 +134,29 @@ int main(void)
 	printf("IAP_tftpd_init:OK\r\n");
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	int bootDelay=0x7FFFFFFF;
   while (1)
   {
   /* USER CODE END WHILE */
 		MX_LWIP_Process();
   /* USER CODE BEGIN 3 */
+		if(0==IAP_get_flag())
+		{
+			bootDelay--;
+			
+		}
+		else if(2==IAP_get_flag())
+		{
+			break;
+		}
+		if(bootDelay<0)
+		{
+			break;
+		}
   }
+	RunApplication();
+	
+	
   /* USER CODE END 3 */
 
 }
@@ -230,7 +251,36 @@ static void MX_NVIC_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+/**
+  * @brief  This function runs a previously loaded application
+  * @param  None
+  * @retval None
+  */
+static void RunApplication(void)
+{
+	/* Check if valid stack address (RAM address) then jump to user application */
+    if (((*(__IO uint32_t*)USER_FLASH_FIRST_PAGE_ADDRESS) & 0x2FFE0000 ) == 0x20000000)
+    {
+      /* Jump to user application */
+      JumpAddress = *(__IO uint32_t*) (USER_FLASH_FIRST_PAGE_ADDRESS + 4);
+      Jump_To_Application = (pFunction) JumpAddress;
+      /* Initialize user application's Stack Pointer */
+      __set_MSP(*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS);
+      Jump_To_Application();
+      /* do nothing */
+      while(1);
+    }
+    else
+    {/* Otherwise, do nothing */
+      /* LED3 (RED) ON to indicate bad software (when not valid stack address) */
+      /* do nothing */
+			
+      while(1)
+			{
+				Error_Handler();
+			}
+    }
+}
 /* USER CODE END 4 */
 
 /**

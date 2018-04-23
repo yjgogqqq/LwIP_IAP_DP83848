@@ -107,6 +107,6 @@ typedef enum {
 
 void IAP_tftpd_init(void);
 
-
+char IAP_get_flag(void);
 #endif
 

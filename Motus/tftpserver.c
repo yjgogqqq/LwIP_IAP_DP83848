@@ -51,6 +51,7 @@
 
 #ifdef USE_IAP_TFTP
 
+char IAP_DownloadFlag=0;
 /* Private variables ---------------------------------------------------------*/
 static uint32_t Flash_Write_Address;
 static struct udp_pcb *UDPpcb;
@@ -244,7 +245,9 @@ static void IAP_wrq_recv_callback(void *_args, struct udp_pcb *upcb, struct pbuf
   {
     IAP_tftp_cleanup_wr(upcb, args);
     pbuf_free(pkt_buf);
-    
+		
+    IAP_DownloadFlag=2;
+		printf("IAP_tftp_recv_callback:OVER\r\n");
 #ifdef USE_LCD
     sprintf(message, "%d bytes ",(int)total_count);
     LCD_UsrLog("Tot bytes Received:, %s\n", message);
@@ -325,7 +328,8 @@ static void IAP_tftp_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf 
   tftp_opcode op;
   struct udp_pcb *upcb_tftp_data;
   err_t err;
-		printf("IAP_tftp_recv_callback\r\n");
+	IAP_DownloadFlag=1;
+	printf("IAP_tftp_recv_callback:OK\r\n");
 #ifdef USE_LCD
   uint32_t i;
   char filename[40],message[46], *ptr;
@@ -390,6 +394,8 @@ static void IAP_tftp_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf 
     IAP_tftp_process_write(upcb_tftp_data, addr, port);
   }
   pbuf_free(pkt_buf);
+	
+	
 }
 
 
@@ -450,7 +456,15 @@ void IAP_tftpd_init(void)
 #endif
   }
 }
-
+/**
+  * @brief  Get IAP Flag
+  * @param  None  
+  * @retval None
+  */
+char IAP_get_flag()
+{
+	return IAP_DownloadFlag;
+}
 #endif /* USE_IAP_TFTP */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
