@@ -48,26 +48,29 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "stm32f4xx_hal.h"
-#include "can.h"
-#include "dma.h"
-#include "fatfs.h"
-#include "iwdg.h"
-#include "lwip.h"
-#include "sdio.h"
-#include "tim.h"
-#include "usart.h"
-#include "wwdg.h"
-#include "gpio.h"
+#include "lwip/opt.h"
+#include "lwip/init.h"
+#include "lwip/netif.h"
+#include "lwip/timeouts.h"
+#include "netif/etharp.h"
+#include "ethernetif.h"
+#include "tftpserver.h"
 
 /* USER CODE BEGIN Includes */
+#include "lwip.h"
+#include "usart.h"
 #include "tftpserver.h"
 /* USER CODE END Includes */
 
-/* Private variables ---------------------------------------------------------*/
-
 /* USER CODE BEGIN PV */
+/* Private typedef -----------------------------------------------------------*/
+typedef  void (*pFunction)(void);
+
+/* Private define ------------------------------------------------------------*/
+/* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
+pFunction Jump_To_Application;
+uint32_t JumpAddress;
 
 /* USER CODE END PV */
 
@@ -113,36 +116,25 @@ int main(void)
 
   /* Initialize all configured peripherals */
 	HAL_Delay(5000);			//waiting
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  //MX_CAN1_Init();
-  //MX_CAN2_Init();
-  //MX_IWDG_Init();
-  MX_SDIO_SD_Init();
+
+
   //MX_TIM2_Init();
   MX_USART1_UART_Init();
-  //MX_USART2_UART_Init();
-  //MX_USART3_UART_Init();
-  //MX_WWDG_Init();
-  MX_FATFS_Init();
   MX_LWIP_Init();
-	
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
 	/* Initialize the TFTP server */
-  tftpd_init();
+  IAP_tftpd_init();
   /* USER CODE END 2 */
-
+	printf("IAP_tftpd_init:OK\r\n");
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
   /* USER CODE END WHILE */
 		MX_LWIP_Process();
   /* USER CODE BEGIN 3 */
-
   }
   /* USER CODE END 3 */
 

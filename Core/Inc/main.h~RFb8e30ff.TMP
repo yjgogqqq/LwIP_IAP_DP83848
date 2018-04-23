@@ -1,13 +1,17 @@
 /**
   ******************************************************************************
-  * @file    LwIP/LwIP_TFTP_Server/Inc/tftpserver.h 
-  * @author  MCD Application Team
-  * @brief   This file is the header of tftpserver file.
+  * @file           : main.h
+  * @brief          : Header for main.c file.
+  *                   This file contains the common defines of the application.
   ******************************************************************************
-  * @attention
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
-  * <h2><center>&copy; Copyright © 2016 STMicroelectronics International N.V. 
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2018 STMicroelectronics International N.V. 
+  * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
   * modification, are permitted, provided that the following conditions are met:
@@ -43,70 +47,40 @@
   ******************************************************************************
   */
 
-#ifndef __TFTPSERVER_H_
-#define __TFTPSERVER_H_
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef __MAIN_H__
+#define __MAIN_H__
 
-#include "lwip/mem.h"
-#include "lwip/udp.h"
+/* Includes ------------------------------------------------------------------*/
+#include "stm32f4xx_hal.h"
 
+/* USER CODE BEGIN Includes */
 
+/* USER CODE END Includes */
 
-#define TFTP_OPCODE_LEN         2
-#define TFTP_BLKNUM_LEN         2
-#define TFTP_DATA_LEN_MAX       512
-#define TFTP_DATA_PKT_HDR_LEN   (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
-#define TFTP_ERR_PKT_HDR_LEN    (TFTP_OPCODE_LEN + TFTP_ERRCODE_LEN)
-#define TFTP_ACK_PKT_LEN        (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
-#define TFTP_DATA_PKT_LEN_MAX   (TFTP_DATA_PKT_HDR_LEN + TFTP_DATA_LEN_MAX)
-#define TFTP_MAX_RETRIES        3
-#define TFTP_TIMEOUT_INTERVAL   5
+/* Private define ------------------------------------------------------------*/
 
+/* ########################## Assert Selection ############################## */
+/**
+  * @brief Uncomment the line below to expanse the "assert_param" macro in the 
+  *        HAL drivers code
+  */
+ #define USE_FULL_ASSERT    1U 
 
-typedef struct
-{
-  int op;    /*WRQ */
-  /* last block read */
-  char data[TFTP_DATA_PKT_LEN_MAX];
-  int  data_len;
-  /* destination ip:port */
-  ip_addr_t to_ip;
-  int to_port;
-  /* next block number */
-  int block;
-  /* total number of bytes transferred */
-  int tot_bytes;
-  /* timer interrupt count when last packet was sent */
-  /* this should be used to resend packets on timeout */
-  unsigned long long last_time;
- 
-}tftp_connection_args;
+/* USER CODE BEGIN Private defines */
 
+/* USER CODE END Private defines */
 
-/* TFTP opcodes as specified in RFC1350   */
-typedef enum {
-  TFTP_RRQ = 1,
-  TFTP_WRQ = 2,
-  TFTP_DATA = 3,
-  TFTP_ACK = 4,
-  TFTP_ERROR = 5
-} tftp_opcode;
+#ifdef __cplusplus
+ extern "C" {
+#endif
+void _Error_Handler(char *, int);
 
-
-/* TFTP error codes as specified in RFC1350  */
-typedef enum {
-  TFTP_ERR_NOTDEFINED,
-  TFTP_ERR_FILE_NOT_FOUND,
-  TFTP_ERR_ACCESS_VIOLATION,
-  TFTP_ERR_DISKFULL,
-  TFTP_ERR_ILLEGALOP,
-  TFTP_ERR_UKNOWN_TRANSFER_ID,
-  TFTP_ERR_FILE_ALREADY_EXISTS,
-  TFTP_ERR_NO_SUCH_USER,
-} tftp_errorcode;
-
-
-void IAP_tftpd_init(void);
-
-
+#define Error_Handler() _Error_Handler(__FILE__, __LINE__)
+#ifdef __cplusplus
+}
 #endif
 
+#endif /* __MAIN_H__ */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
