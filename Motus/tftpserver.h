@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics International N.V. 
+  * <h2><center>&copy; Copyright ? 2016 STMicroelectronics International N.V. 
   * All rights reserved.</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -53,12 +53,34 @@
 
 #define TFTP_OPCODE_LEN         2
 #define TFTP_BLKNUM_LEN         2
-#define TFTP_ERRCODE_LEN        2
 #define TFTP_DATA_LEN_MAX       512
 #define TFTP_DATA_PKT_HDR_LEN   (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
 #define TFTP_ERR_PKT_HDR_LEN    (TFTP_OPCODE_LEN + TFTP_ERRCODE_LEN)
 #define TFTP_ACK_PKT_LEN        (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
 #define TFTP_DATA_PKT_LEN_MAX   (TFTP_DATA_PKT_HDR_LEN + TFTP_DATA_LEN_MAX)
+#define TFTP_MAX_RETRIES        3
+#define TFTP_TIMEOUT_INTERVAL   5
+
+
+typedef struct
+{
+  int op;    /*WRQ */
+  /* last block read */
+  char data[TFTP_DATA_PKT_LEN_MAX];
+  int  data_len;
+  /* destination ip:port */
+  ip_addr_t to_ip;
+  int to_port;
+  /* next block number */
+  int block;
+  /* total number of bytes transferred */
+  int tot_bytes;
+  /* timer interrupt count when last packet was sent */
+  /* this should be used to resend packets on timeout */
+  unsigned long long last_time;
+ 
+}tftp_connection_args;
+
 
 /* TFTP opcodes as specified in RFC1350   */
 typedef enum {
@@ -83,9 +105,8 @@ typedef enum {
 } tftp_errorcode;
 
 
-void tftpd_init(void);
-int tftp_process_write(struct udp_pcb *upcb2, const ip_addr_t *to, unsigned short to_port, char* FileName);
-int tftp_process_read(struct udp_pcb *upcb2, const ip_addr_t *to, unsigned short to_port, char* FileName);
+void IAP_tftpd_init(void);
+
 
 #endif
 

@@ -55,7 +55,23 @@
 #include "stm32f4xx_hal.h"
 
 /* USER CODE BEGIN Includes */
+#define USE_IAP_TFTP   /* enable IAP using TFTP */
+/* Flash user area definition *************************************************/   
+/* 
+   IMPORTANT NOTE:
+   ==============
+   Be sure that USER_FLASH_FIRST_PAGE_ADDRESS do not overlap with IAP code.
+   For example, with all option enabled the total readonly memory size using SW4STM32
+   IDE v2.1.0, with optimization for size, is 59784 bytes.
+   Based on this result four sectors of 16 Kbytes and a sector of 64 Kbytes will be used to store
+   the IAP code, so the user Flash address will start from Sector5.
 
+   In this application the define USER_FLASH_FIRST_PAGE_ADDRESS is set to 128K boundary,
+   but it can be changed to any other address outside the 1st 128 Kbytes of the Flash.
+   */
+#define USER_FLASH_FIRST_PAGE_ADDRESS 0x08020000 /* Only as example see comment */
+#define USER_FLASH_LAST_PAGE_ADDRESS  0x080E0000
+#define USER_FLASH_END_ADDRESS        0x080FFFFF 
 /* USER CODE END Includes */
 
 /* Private define ------------------------------------------------------------*/

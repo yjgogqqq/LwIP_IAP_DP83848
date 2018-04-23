@@ -131,7 +131,7 @@ int main(void)
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
 	/* Initialize the TFTP server */
-  tftpd_init();
+  IAP_tftpd_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */

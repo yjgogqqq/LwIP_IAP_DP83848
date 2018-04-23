@@ -1,6 +1,6 @@
 /**
   ******************************************************************************
-  * @file    LwIP/LwIP_TFTP_Server/Src/tftpserver.c
+  * @file    LwIP/LwIP_IAP/Src/tftpserver.c
   * @author  MCD Application Team
   * @brief   basic tftp server implementation for IAP (only Write Req supported)
   ******************************************************************************
@@ -42,85 +42,132 @@
   *
   ******************************************************************************
   */
-
+/* Includes ------------------------------------------------------------------*/
 #include "tftpserver.h"
-#include "tftputils.h" 
-#include "ff.h"
-#include "stm32f4xx_hal.h"
+#include "flash_if.h"
 #include <string.h>
+#include <stdio.h>
+#include "main.h"
+//#include "lcd_log.h"
+
+#ifdef USE_IAP_TFTP
+
+/* Private variables ---------------------------------------------------------*/
+static uint32_t Flash_Write_Address;
+static struct udp_pcb *UDPpcb;
+static __IO uint32_t total_count=0;
 
 
-typedef struct
-{
-  int op;    /* RRQ/WRQ */
+/* Private function prototypes -----------------------------------------------*/
 
-  /* last block read */
-  char data[TFTP_DATA_PKT_LEN_MAX];
-  uint32_t  data_len;
+static void IAP_wrq_recv_callback(void *_args, struct udp_pcb *upcb, struct pbuf *pkt_buf, 
+                        const ip_addr_t *addr, u16_t port);
 
-  /* destination ip:port */
-  ip_addr_t to_ip;
-  int to_port;
+static int IAP_tftp_process_write(struct udp_pcb *upcb, const ip_addr_t *to, int to_port);
 
-  /* next block number */
-  int block;
+static void IAP_tftp_recv_callback(void *arg, struct udp_pcb *Upcb, struct pbuf *pkt_buf,
+                        const ip_addr_t *addr, u16_t port);
 
-  /* total number of bytes transferred */
-  int tot_bytes;
+static void IAP_tftp_cleanup_wr(struct udp_pcb *upcb, tftp_connection_args *args);
+static tftp_opcode IAP_tftp_decode_op(char *buf);
+static u16_t IAP_tftp_extract_block(char *buf);
+static void IAP_tftp_set_opcode(char *buffer, tftp_opcode opcode);
+static void IAP_tftp_set_block(char* packet, u16_t block);
+static err_t IAP_tftp_send_ack_packet(struct udp_pcb *upcb, const ip_addr_t *to, int to_port, int block);
 
-  /* timer interrupt count when last packet was sent */
-  /* this should be used to resend packets on timeout */
-  unsigned long long last_time;
-
-}tftp_connection_args;
-
-FATFS filesystem;
-FIL file_SD, file_CR;
-DIR dir_1, dir_2;
-
-/* UDPpcb to be binded with port 69  */
-struct udp_pcb *UDPpcb;
-
-/* tftp_errorcode error strings */
-char *tftp_errorcode_string[] = {
-                                  "not defined",
-                                  "file not found",
-                                  "access violation",
-                                  "disk full",
-                                  "illegal operation",
-                                  "unknown transfer id",
-                                  "file already exists",
-                                  "no such user",
-                                };
-
-void recv_callback_tftp(void *arg, struct udp_pcb *upcb, struct pbuf *pkt_buf, const ip_addr_t *addr, u16_t port);
+/* Private functions ---------------------------------------------------------*/
 
 
 /**
-  * @brief  sends a TFTP message
-  * @param  upcb: pointer on a udp pcb
-  * @param  to_ip: pointer on remote IP address
-  * @param  to_port: pointer on remote port  
-  * @param buf: pointer on buffer where to create the message  
-  * @param err: error code of type tftp_errorcode
-  * @retval error code
+  * @brief Returns the TFTP opcode 
+  * @param buf: pointer on the TFTP packet 
+  * @retval None
   */
-err_t tftp_send_message(struct udp_pcb *upcb, const ip_addr_t *to_ip, unsigned short to_port, char *buf, unsigned short buflen)
+static tftp_opcode IAP_tftp_decode_op(char *buf)
+{
+  return (tftp_opcode)(buf[1]);
+}
+
+/**
+  * @brief  Extracts the block number
+  * @param  buf: pointer on the TFTP packet 
+  * @retval block number
+  */
+static u16_t IAP_tftp_extract_block(char *buf)
+{
+  u16_t *b = (u16_t*)buf;
+  return ntohs(b[1]);
+}
+
+/**
+  * @brief Sets the TFTP opcode 
+  * @param  buffer: pointer on the TFTP packet
+  * @param  opcode: TFTP opcode
+  * @retval None
+  */
+static void IAP_tftp_set_opcode(char *buffer, tftp_opcode opcode)
+{
+  buffer[0] = 0;
+  buffer[1] = (u8_t)opcode;
+}
+
+/**
+  * @brief Sets the TFTP block number 
+  * @param packet: pointer on the TFTP packet 
+  * @param  block: block number
+  * @retval None
+  */
+static void IAP_tftp_set_block(char* packet, u16_t block)
+{
+  u16_t *p = (u16_t *)packet;
+  p[1] = htons(block);
+}
+
+/**
+  * @brief Sends TFTP ACK packet  
+  * @param upcb: pointer on udp_pcb structure
+  * @param to: pointer on the receive IP address structure
+  * @param to_port: receive port number
+  * @param block: block number
+  * @retval: err_t: error code 
+  */
+static err_t IAP_tftp_send_ack_packet(struct udp_pcb *upcb, const ip_addr_t *to, int to_port, int block)
 {
   err_t err;
   struct pbuf *pkt_buf; /* Chain of pbuf's to be sent */
 
-  /* PBUF_TRANSPORT - specifies the transport layer */
-  pkt_buf = pbuf_alloc(PBUF_TRANSPORT, buflen, PBUF_POOL);
+  /* create the maximum possible size packet that a TFTP ACK packet can be */
+  char packet[TFTP_ACK_PKT_LEN];
+	
+	memset(packet, 0, TFTP_ACK_PKT_LEN *sizeof(char));
 
-  if (!pkt_buf)      /*if the packet pbuf == NULL exit and end transmission */
+  /* define the first two bytes of the packet */
+  IAP_tftp_set_opcode(packet, TFTP_ACK);
+
+  /* Specify the block number being ACK'd.
+   * If we are ACK'ing a DATA pkt then the block number echoes that of the DATA pkt being ACK'd (duh)
+   * If we are ACK'ing a WRQ pkt then the block number is always 0
+   * RRQ packets are never sent ACK pkts by the server, instead the server sends DATA pkts to the
+   * host which are, obviously, used as the "acknowledgement".  This saves from having to sEndTransferboth
+   * an ACK packet and a DATA packet for RRQs - see RFC1350 for more info.  */
+  IAP_tftp_set_block(packet, block);
+
+  /* PBUF_TRANSPORT - specifies the transport layer */
+  pkt_buf = pbuf_alloc(PBUF_TRANSPORT, TFTP_ACK_PKT_LEN, PBUF_POOL);
+
+  if (!pkt_buf)      /*if the packet pbuf == NULL exit and EndTransfertransmission */
+  {
+#ifdef USE_LCD
+    LCD_ErrLog("Can not allocate pbuf\n");
+#endif
     return ERR_MEM;
+  }
 
   /* Copy the original data buffer over to the packet buffer's payload */
-  memcpy(pkt_buf->payload, buf, buflen);
+  memcpy(pkt_buf->payload, packet, TFTP_ACK_PKT_LEN);
 
   /* Sending packet by UDP protocol */
-  err = udp_sendto(upcb, pkt_buf, to_ip, to_port);
+  err = udp_sendto(upcb, pkt_buf, to, to_port);
 
   /* free the buffer pbuf */
   pbuf_free(pkt_buf);
@@ -128,280 +175,83 @@ err_t tftp_send_message(struct udp_pcb *upcb, const ip_addr_t *to_ip, unsigned s
   return err;
 }
 
-
 /**
-  * @brief construct an error message into buf
-  * @param buf: pointer on buffer where to create the message  
-  * @param err: error code of type tftp_errorcode
-  * @retval 
-  */
-int tftp_construct_error_message(char *buf, tftp_errorcode err)
-{
-  int errorlen;
-  /* Set the opcode in the 2 first bytes */
-  tftp_set_opcode(buf, TFTP_ERROR);
-  /* Set the errorcode in the 2 second bytes  */
-  tftp_set_errorcode(buf, err);
-  /* Set the error message in the last bytes */
-  tftp_set_errormsg(buf, tftp_errorcode_string[err]);
-  /* Set the length of the error message  */
-  errorlen = strlen(tftp_errorcode_string[err]);
-
-  /* return message size */
-  return 4 + errorlen + 1;
-}
-
-
-/**
-  * @brief Sends a TFTP error message
-  * @param  upcb: pointer on a udp pcb
-  * @param  to: pointer on remote IP address
-  * @param  to_port: pointer on remote port  
-  * @param  err: tftp error code
-  * @retval error value
-  */
-int tftp_send_error_message(struct udp_pcb *upcb, const ip_addr_t *to, int to_port, tftp_errorcode err)
-{
-  char buf[512];
-  int error_len;
-
-  /* construct error */
-  error_len = tftp_construct_error_message(buf, err);
-  /* send error message */
-  return tftp_send_message(upcb, to, to_port, buf, error_len);
-}
-
-
-/**
-  * @brief  Sends TFTP data packet
-  * @param  upcb: pointer on a udp pcb
-  * @param  to: pointer on remote IP address
-  * @param  to_port: pointer on remote udp port
-  * @param  block: block number
-  * @param  buf: pointer on data buffer
-  * @param  buflen: buffer length
-  * @retval error value
-  */
-int tftp_send_data_packet(struct udp_pcb *upcb, const ip_addr_t *to, int to_port, unsigned short block,
-                          char *buf, int buflen)
-{
-  char packet[TFTP_DATA_PKT_LEN_MAX]; /* (512+4) bytes */
-
-  /* Set the opcode 3 in the 2 first bytes */
-  tftp_set_opcode(packet, TFTP_DATA);
-  /* Set the block numero in the 2 second bytes */
-  tftp_set_block(packet, block);
-  /* Set the data message in the n last bytes */
-  tftp_set_data_message(packet, buf, buflen);
-  /* Send DATA packet */
-  return tftp_send_message(upcb, to, to_port, packet, buflen + 4);
-}
-
-/**
-  * @brief  Sends TFTP ACK packet
-  * @param  upcb: pointer on a udp pcb
-  * @param  to: pointer on remote IP address
-  * @param  to_port: pointer on remote udp port
-  * @param  block: block number
-  * @retval error value
-  */
-int tftp_send_ack_packet(struct udp_pcb *upcb, const ip_addr_t *to, int to_port, unsigned short block)
-{
-
-  /* create the maximum possible size packet that a TFTP ACK packet can be */
-  char packet[TFTP_ACK_PKT_LEN];
-
-  /* define the first two bytes of the packet */
-  tftp_set_opcode(packet, TFTP_ACK);
-
-  /* Specify the block number being ACK'd.
-   * If we are ACK'ing a DATA pkt then the block number echoes that of the DATA pkt being ACK'd (duh)
-   * If we are ACK'ing a WRQ pkt then the block number is always 0
-   * RRQ packets are never sent ACK pkts by the server, instead the server sends DATA pkts to the
-   * host which are, obviously, used as the "acknowledgement" */
-  tftp_set_block(packet, block);
-
-  return tftp_send_message(upcb, to, to_port, packet, TFTP_ACK_PKT_LEN);
-}
-
-
-/**
-  * @brief Cleanup after end of TFTP read operation
-  * @param upcb: pointer on udp pcb
-  * @param  args: pointer on a structure of type tftp_connection_args
+  * @brief  Processes data transfers after a TFTP write request
+  * @param  _args: used as pointer on TFTP connection args
+  * @param  upcb: pointer on udp_pcb structure
+  * @param  pkt_buf: pointer on a pbuf stucture
+  * @param  ip_addr: pointer on the receive IP_address structure
+  * @param  port: receive port address
   * @retval None
   */
-void tftp_cleanup_rd(struct udp_pcb *upcb, tftp_connection_args *args)
+static void IAP_wrq_recv_callback(void *_args, struct udp_pcb *upcb, struct pbuf *pkt_buf, const ip_addr_t *addr, u16_t port)
 {
-  /* close the filesystem */
-  f_close(&file_SD);
-  f_mount(NULL, (TCHAR const*)"",0);
-  /* Free the tftp_connection_args structure reserverd for */
-  mem_free(args);
+  tftp_connection_args *args = (tftp_connection_args *)_args;
+  uint32_t data_buffer[128];
+  uint16_t count=0;
 
-  /* Disconnect the udp_pcb*/  
-  udp_disconnect(upcb);
+#ifdef USE_LCD
+  char message[40];
+#endif
 
-  /* close the connection */
-  udp_remove(upcb);
-
-  udp_recv(UDPpcb, recv_callback_tftp, NULL);
-}
-
-/**
-  * @brief Cleanup after end of TFTP write operation
-  * @param upcb: pointer on udp pcb
-  * @param  args: pointer on a structure of type tftp_connection_args
-  * @retval None
-  */
-void tftp_cleanup_wr(struct udp_pcb *upcb, tftp_connection_args *args)
-{
-  /* close the filesystem */
-  f_close(&file_CR);
-  f_mount(NULL, (TCHAR const*)"",0);
-  /* Free the tftp_connection_args structure reserverd for */
-  mem_free(args);
-
-  /* Disconnect the udp_pcb*/
-  udp_disconnect(upcb);
-
-  /* close the connection */
-  udp_remove(upcb);
-
-  /* reset the callback function */
-  udp_recv(UDPpcb, recv_callback_tftp, NULL);
-}
-
-/**
-  * @brief  sends next data block during TFTP READ operation
-  * @param  upcb: pointer on a udp pcb
-  * @param  args: pointer on structure of type tftp_connection_args
-  * @param  to_ip: pointer on remote IP address
-  * @param  to_port: pointer on remote udp port
-  * @retval None
-  */
-void tftp_send_next_block(struct udp_pcb *upcb, tftp_connection_args *args,
-                          const ip_addr_t *to_ip, u16_t to_port)
-{
-  /* Function to read 512 bytes from the file to send (file_SD), put them
-   * in "args->data" and return the number of bytes read */
-   f_read(&file_SD, (uint8_t*)args->data, TFTP_DATA_LEN_MAX, (UINT*)(&args->data_len));
-
-  /*   NOTE: We need to send data packet even if args->data_len = 0*/
- 
-  /* sEndTransferthe data */
-  tftp_send_data_packet(upcb, to_ip, to_port, args->block, args->data, args->data_len);
-
-}
-
-/**
-  * @brief  receive callback during tftp read operation (not on standard port 69)
-  * @param  arg: pointer on argument passed to callback
-  * @param  udp_pcb: pointer on the udp pcb
-  * @param  pkt_buf: pointer on the received pbuf
-  * @param  addr: pointer on remote IP address
-  * @param  port: pointer on remote udp port
-  * @retval None
-  */
-void rrq_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p,
-                       const ip_addr_t *addr, u16_t port)
-{
-  /* Get our connection state  */
-  tftp_connection_args *args = (tftp_connection_args *)arg;
-
-  if (tftp_is_correct_ack(p->payload, args->block))
-  {
-    /* increment block # */
-    args->block++;
-  }
-  else
-  {
-    /* we did not receive the expected ACK, so
-       do not update block #. This causes the current block to be resent. */
-  }
-
-  /* if the last read returned less than the requested number of bytes
-   * (i.e. TFTP_DATA_LEN_MAX), then we've sent the whole file and we can quit
-   */
-  if (args->data_len < TFTP_DATA_LEN_MAX)
-  {
-    /* Clean the connection*/
-    tftp_cleanup_rd(upcb, args);
-
-    pbuf_free(p);
-  }
-
-  /* if the whole file has not yet been sent then continue  */
-  tftp_send_next_block(upcb, args, addr, port);
-
-  pbuf_free(p);
-}
-
-/**
-  * @brief  receive callback during tftp write operation (not on standard port 69)
-  * @param  arg: pointer on argument passed to callback
-  * @param  udp_pcb: pointer on the udp pcb
-  * @param  pkt_buf: pointer on the received pbuf
-  * @param  addr: pointer on remote IP address
-  * @param  port: pointer on remote port
-  * @retval None
-  */
-void wrq_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf *pkt_buf, const ip_addr_t *addr, u16_t port)
-{
-  tftp_connection_args *args = (tftp_connection_args *)arg;
-  int n = 0;
-
-  /* we expect to receive only one pbuf (pbuf size should be 
-     configured > max TFTP frame size */
   if (pkt_buf->len != pkt_buf->tot_len)
   {
+#ifdef USE_LCD
+    LCD_ErrLog("Invalid data length\n");
+#endif
     return;
   }
 
   /* Does this packet have any valid data to write? */
   if ((pkt_buf->len > TFTP_DATA_PKT_HDR_LEN) &&
-      (tftp_extract_block(pkt_buf->payload) == (args->block + 1)))
+      (IAP_tftp_extract_block(pkt_buf->payload) == (args->block + 1)))
   {
-    /* write the received data to the file */
-    f_write(&file_CR, (char*)pkt_buf->payload + TFTP_DATA_PKT_HDR_LEN, pkt_buf->len - TFTP_DATA_PKT_HDR_LEN, (UINT*)&n);
-
-    if (n <= 0)
-    {
-      tftp_send_error_message(upcb, addr, port, TFTP_ERR_FILE_NOT_FOUND);
-      /* close the connection */
-      tftp_cleanup_wr(upcb, args); /* close the connection */
-    }
+    /* copy packet payload to data_buffer */
+    pbuf_copy_partial(pkt_buf, data_buffer, pkt_buf->len - TFTP_DATA_PKT_HDR_LEN,
+                      TFTP_DATA_PKT_HDR_LEN);
     
+    total_count += pkt_buf->len - TFTP_DATA_PKT_HDR_LEN; 
+    
+    count = (pkt_buf->len - TFTP_DATA_PKT_HDR_LEN)/4;
+    if (((pkt_buf->len - TFTP_DATA_PKT_HDR_LEN)%4)!=0) 
+    count++;
+     
+    /* Write received data in Flash */
+    FLASH_If_Write(&Flash_Write_Address, data_buffer ,count);
+       
     /* update our block number to match the block number just received */
     args->block++;
-    
     /* update total bytes  */
     (args->tot_bytes) += (pkt_buf->len - TFTP_DATA_PKT_HDR_LEN);
+
+    /* This is a valid pkt but it has no data.  This would occur if the file being
+       written is an exact multiple of 512 bytes.  In this case, the args->block
+       value must still be updated, but we can skip everything else.    */
   }
-  else if (tftp_extract_block(pkt_buf->payload) == (args->block + 1))
+  else if (IAP_tftp_extract_block(pkt_buf->payload) == (args->block + 1))
   {
     /* update our block number to match the block number just received  */
     args->block++;
   }
-
-  /* Send the appropriate ACK pkt (the block number sent in the ACK pkt echoes
-   * the block number of the DATA pkt we just received - see RFC1350)
-   * NOTE!: If the DATA pkt we received did not have the appropriate block
-   * number, then the args->block (our block number) is never updated and
-   * we simply send "duplicate ACK" which has the same block number as the
-   * last ACK pkt we sent.  This lets the host know that we are still waiting
-   * on block number args->block+1. 
-   */
-  tftp_send_ack_packet(upcb, addr, port, args->block);
+  
+  /* Send the appropriate ACK pkt*/
+  IAP_tftp_send_ack_packet(upcb, addr, port, args->block);   
 
   /* If the last write returned less than the maximum TFTP data pkt length,
    * then we've received the whole file and so we can quit (this is how TFTP
-   * signals the end of a transfer!)
+   * signals the EndTransferof a transfer!)
    */
   if (pkt_buf->len < TFTP_DATA_PKT_LEN_MAX)
   {
-    tftp_cleanup_wr(upcb, args);
+    IAP_tftp_cleanup_wr(upcb, args);
     pbuf_free(pkt_buf);
+    
+#ifdef USE_LCD
+    sprintf(message, "%d bytes ",(int)total_count);
+    LCD_UsrLog("Tot bytes Received:, %s\n", message);
+    LCD_UsrLog("  State: Prog Finished \n");
+    LCD_UsrLog("Reset the board \n");
+#endif
   }
   else
   {
@@ -412,95 +262,24 @@ void wrq_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf *pkt_buf, co
 
 
 /**
-  * @brief  processes tftp read operation
-  * @param  upcb: pointer on udp pcb 
-  * @param  to: pointer on remote IP address
-  * @param  to_port: pointer on remote udp port
-  * @param  FileName: pointer on filename to be read
-  * @retval error code
+  * @brief  Processes TFTP write request
+  * @param  to: pointer on the receive IP address
+  * @param  to_port: receive port number
+  * @retval None
   */
-int tftp_process_read(struct udp_pcb *upcb, const ip_addr_t *to, unsigned short to_port, char* FileName)
+static int IAP_tftp_process_write(struct udp_pcb *upcb, const ip_addr_t *to, int to_port)
 {
   tftp_connection_args *args = NULL;
-
-  /* If Could not open the file which will be transmitted  */
-  if (f_open(&file_SD, (const TCHAR*)FileName, FA_READ) != FR_OK)
-  {
-    tftp_send_error_message(upcb, to, to_port, TFTP_ERR_FILE_NOT_FOUND);
-
-    tftp_cleanup_rd(upcb, args);
-
-    return 0;
-  }
-  
-  args = mem_malloc(sizeof *args);
-  /* If we aren't able to allocate memory for a "tftp_connection_args" */
-  if (!args)
-  {
-    /* unable to allocate memory for tftp args  */
-    tftp_send_error_message(upcb, to, to_port, TFTP_ERR_NOTDEFINED);
-
-    /* no need to use tftp_cleanup_rd because no "tftp_connection_args" struct has been malloc'd   */
-    tftp_cleanup_rd(upcb, args);
-
-    return 0;
-  }
-
-  /* initialize connection structure  */
-  args->op = TFTP_RRQ;
-  args->to_ip.addr = to->addr;
-  args->to_port = to_port;
-  args->block = 1; /* block number starts at 1 (not 0) according to RFC1350  */
-  args->tot_bytes = 0;
-
-
-  /* set callback for receives on this UDP PCB  */
-  udp_recv(upcb, rrq_recv_callback, args);
-
-  /* initiate the transaction by sending the first block of data,
-    further blocks will be sent when ACKs are received */
-
-  tftp_send_next_block(upcb, args, to, to_port);
-
-  return 1;
-}
-
-/**
-  * @brief  processes tftp write operation
-  * @param  upcb: pointer on upd pcb 
-  * @param  to: pointer on remote IP address
-  * @param  to_port: pointer on remote udp port
-  * @param  FileName: pointer on filename to be written 
-  * @retval error code
-  */
-int tftp_process_write(struct udp_pcb *upcb, const ip_addr_t *to, unsigned short to_port, char *FileName)
-{
-  tftp_connection_args *args = NULL;
-
-  /* Can not create file */
-  if (f_open(&file_CR, (const TCHAR*)FileName, FA_CREATE_ALWAYS|FA_WRITE) != FR_OK)
-  {
-    tftp_send_error_message(upcb, to, to_port, TFTP_ERR_NOTDEFINED);
-
-    tftp_cleanup_wr(upcb, args);
-		
-		_Error_Handler(__FILE__, __LINE__);
-    return 0;
-  }
-	else
-	{
-		#ifdef USE_PRINTF
-		printf("f_open:Success\r\n");
-		#endif
-	}
+  /* This function is called from a callback,
+  * therefore interrupts are disabled,
+  * therefore we can use regular malloc   */
   args = mem_malloc(sizeof *args);
   if (!args)
   {
-    tftp_send_error_message(upcb, to, to_port, TFTP_ERR_NOTDEFINED);
-
-    tftp_cleanup_wr(upcb, args);
-
-		_Error_Handler(__FILE__, __LINE__);
+#ifdef USE_LCD
+    LCD_ErrLog("Memory error \n");
+#endif
+    IAP_tftp_cleanup_wr(upcb, args);
     return 0;
   }
 
@@ -511,161 +290,169 @@ int tftp_process_write(struct udp_pcb *upcb, const ip_addr_t *to, unsigned short
   args->block = 0;
   args->tot_bytes = 0;
 
-  /* set callback for receives on this UDP PCB  */
-  udp_recv(upcb, wrq_recv_callback, args);
+  /* set callback for receives on this UDP PCB (Protocol Control Block) */
+  udp_recv(upcb, IAP_wrq_recv_callback, args);
+  
+  total_count =0;
 
+  /* init flash */
+  FLASH_If_Init();
+  
+  /* erase user flash area */
+  FLASH_If_Erase(USER_FLASH_FIRST_PAGE_ADDRESS);
+ 
+  Flash_Write_Address = USER_FLASH_FIRST_PAGE_ADDRESS;    
   /* initiate the write transaction by sending the first ack */
-  tftp_send_ack_packet(upcb, to, to_port, args->block);
-
+  IAP_tftp_send_ack_packet(upcb, to, to_port, args->block);
+#ifdef USE_LCD
+  LCD_UsrLog("  State: Programming... \n");
+#endif
   return 0;
 }
 
 
 /**
-  * @brief  processes the tftp request on port 69
-  * @param  pkt_buf: pointer on received pbuf
-  * @param  ip_addr: pointer on source IP address
-  * @param  port: pointer on source udp port
+  * @brief  Processes traffic received on UDP port 69
+  * @param  args: pointer on tftp_connection arguments
+  * @param  upcb: pointer on udp_pcb structure
+  * @param  pbuf: pointer on packet buffer
+  * @param  addr: pointer on the receive IP address
+  * @param  port: receive port number
   * @retval None
   */
-void process_tftp_request(struct pbuf *pkt_buf, const ip_addr_t *addr, u16_t port)
+static void IAP_tftp_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf *pkt_buf,
+                        const ip_addr_t *addr, u16_t port)
 {
-  tftp_opcode op = tftp_decode_op(pkt_buf->payload);
-  char FileName[30];
-  struct udp_pcb *upcb;
+  tftp_opcode op;
+  struct udp_pcb *upcb_tftp_data;
   err_t err;
 
+#ifdef USE_LCD
+  uint32_t i;
+  char filename[40],message[46], *ptr;
+#endif
+
   /* create new UDP PCB structure */
-  upcb = udp_new();
-  if (!upcb)
-  {     
+  upcb_tftp_data = udp_new();
+  if (!upcb_tftp_data)
+  {
     /* Error creating PCB. Out of Memory  */
-		_Error_Handler(__FILE__, __LINE__);
+#ifdef USE_LCD
+    LCD_ErrLog("Can not create pcb \n");
+#endif
     return;
   }
 
   /* bind to port 0 to receive next available free port */
   /* NOTE:  This is how TFTP works.  There is a UDP PCB for the standard port
-   * 69 which al transactions begin communication on, however all subsequent
-   * transactions for a given "stream" occur on another port!  */
-  err = udp_bind(upcb, IP_ADDR_ANY, 0);
+  * 69 which al transactions begin communication on, however, _all_ subsequent
+  * transactions for a given "stream" occur on another port  */
+  err = udp_bind(upcb_tftp_data, IP_ADDR_ANY, 0);
   if (err != ERR_OK)
-  {    
+  {
     /* Unable to bind to port */
-		_Error_Handler(__FILE__, __LINE__);
+#ifdef USE_LCD
+    LCD_ErrLog("Can not create pcb \n");
+#endif
     return;
   }
-  switch (op)
+
+  op = IAP_tftp_decode_op(pkt_buf->payload);
+  if (op != TFTP_WRQ)
   {
-    case TFTP_RRQ: /* TFTP RRQ (read request) */
-    {
-      /* Read the name of the file asked by the client to be sent from the SD card */
-      tftp_extract_filename(FileName, pkt_buf->payload);
-
-      /* Could not open filesystem */
-      if(f_mount(&filesystem, (TCHAR const*)"", 0) != FR_OK)
-      {
-        return;
-      }
-      /* Could not open the selected directory */
-      if (f_opendir(&dir_1, "/") != FR_OK)
-      {
-        return;
-      }
-      /* Start the TFTP read mode*/
-      tftp_process_read(upcb, addr, port, FileName);
-      break;
-    } 
-
-    case TFTP_WRQ: /* TFTP WRQ (write request) */
-    {
-      /* Read the name of the file asked by the client to be received and writen in the SD card */
-      tftp_extract_filename(FileName, pkt_buf->payload);
-			
-      /* Could not open filesystem */
-      if(f_mount(&filesystem, (TCHAR const*)"", 0) != FR_OK)
-      {
-				_Error_Handler(__FILE__, __LINE__);
-        return;
-      }
-			else
-			{
-				#ifdef USE_PRINTF
-				printf("f_mount:Success\r\n");
-				#endif
-			}
-        
-      /* If Could not open the selected directory */
-//      if (f_opendir(&dir_2, "/") != FR_OK)
-//      {
-//				#ifdef USE_PRINTF
-//				printf("f_opendir:%d\r\n",f_opendir(&dir_2, "/"));
-//				#endif
-//				_Error_Handler(__FILE__, __LINE__);
-//        return;
-//      }
-//			else
-//			{
-//				#ifdef USE_PRINTF
-//				printf("f_opendir:Success\r\n");
-//				#endif
-//			}
-        
-      /* Start the TFTP write mode */
-      tftp_process_write(upcb, addr, port, FileName);
-      break;
-    }
-    default: /* TFTP unknown request op */
-      /* send generic access violation message */
-      tftp_send_error_message(upcb, addr, port, TFTP_ERR_ACCESS_VIOLATION);
-      udp_remove(upcb);
-
-      break;
+    /* remove PCB */
+#ifdef USE_LCD
+    LCD_ErrLog("Bad TFTP opcode \n");
+#endif
+    udp_remove(upcb_tftp_data);
   }
-}
+  else
+  {
+    
+#ifdef USE_LCD
+    ptr = pkt_buf->payload;
+    ptr = ptr +2;
+    /*extract file name info */
+    i= 0;
+    while (*(ptr+i)!=0x0)
+    {
+      i++;
+    }
+    strncpy(filename, ptr, i+1);
 
-
-/**
-  * @brief  tftp receive callback on port 69
-  * @param  arg: pointer on argument passed to callback (not used here)
-  * @param  upcb: pointer on udp pcb
-  * @param  pkt_buf: pointer on received pbuf
-  * @param  ip_addr: pointer on source IP address
-  * @param  port: pointer on source udp port
-  * @retval None
-  */
-void recv_callback_tftp(void *arg, struct udp_pcb *upcb, struct pbuf *pkt_buf,
-                        const ip_addr_t *addr, u16_t port)
-{
-  /* process new connection request */
-  process_tftp_request(pkt_buf, addr, port);
-
-  /* free pbuf */
+    LCD_UsrLog("IAP using TFTP \n");
+    sprintf(message, "File: %s",filename);
+    LCD_UsrLog("%s\n", message);
+    LCD_UsrLog("  State: Erasing...\n");
+#endif
+     
+    /* Start the TFTP write mode*/
+    IAP_tftp_process_write(upcb_tftp_data, addr, port);
+  }
   pbuf_free(pkt_buf);
 }
 
 
-
 /**
-  * @brief  Initializes the udp pcb for TFTP 
-  * @param  None
+  * @brief  disconnect and close the connection 
+  * @param  upcb: pointer on udp_pcb structure
+  * @param  args: pointer on tftp_connection arguments
   * @retval None
   */
-void tftpd_init(void)
+static void IAP_tftp_cleanup_wr(struct udp_pcb *upcb, tftp_connection_args *args)
+{
+  /* Free the tftp_connection_args structure */
+  mem_free(args);
+
+  /* Disconnect the udp_pcb */
+  udp_disconnect(upcb);
+  
+  /* close the connection */
+  udp_remove(upcb);
+  
+  /* reset the callback function */
+  udp_recv(UDPpcb, IAP_tftp_recv_callback, NULL);
+ 
+}
+
+/* Global functions ---------------------------------------------------------*/
+
+/**
+  * @brief  Creates and initializes a UDP PCB for TFTP receive operation  
+  * @param  None  
+  * @retval None
+  */
+void IAP_tftpd_init(void)
 {
   err_t err;
-  unsigned port = 69;
+  unsigned port = 69; /* 69 is the port used for TFTP protocol initial transaction */
 
   /* create a new UDP PCB structure  */
   UDPpcb = udp_new();
-  if (UDPpcb)
-  {  
-    /* Bind this PCB to port 69  */
-    err = udp_bind(UDPpcb, IP_ADDR_ANY, port);
-    if (err == ERR_OK)
-    {    
-      /* TFTP server start  */
-      udp_recv(UDPpcb, recv_callback_tftp, NULL);
-    }
+  if (!UDPpcb)
+  {
+    /* Error creating PCB. Out of Memory  */
+#ifdef USE_LCD
+    LCD_ErrLog("Can not create pcb \n");
+#endif
+    return;
+  }
+
+  /* Bind this PCB to port 69  */
+  err = udp_bind(UDPpcb, IP_ADDR_ANY, port);
+  if (err == ERR_OK)
+  {
+    /* Initialize receive callback function  */
+    udp_recv(UDPpcb, IAP_tftp_recv_callback, NULL);
+  } 
+  else
+  {
+#ifdef USE_LCD
+    LCD_ErrLog("Can not create pcb \n");
+#endif
   }
 }
+
+#endif /* USE_IAP_TFTP */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
