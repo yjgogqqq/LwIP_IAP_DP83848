@@ -131,7 +131,9 @@ int main(void)
 	/* Initialize the TFTP server */
   IAP_tftpd_init();
   /* USER CODE END 2 */
+
 	printf("IAP_tftpd_init:OK\r\n");
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	int bootDelay=0x7FFFFFFF;
@@ -154,6 +156,7 @@ int main(void)
 			break;
 		}
   }
+	printf("run application!\r\n");
 	RunApplication();
 	
 	
@@ -263,7 +266,9 @@ static void RunApplication(void)
     {
       /* Jump to user application */
       JumpAddress = *(__IO uint32_t*) (USER_FLASH_FIRST_PAGE_ADDRESS + 4);
+			printf("JumpAddress:%d\r\n",JumpAddress);
       Jump_To_Application = (pFunction) JumpAddress;
+			printf("Jump_To_Application:%d\r\n",Jump_To_Application);
       /* Initialize user application's Stack Pointer */
       __set_MSP(*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS);
       Jump_To_Application();
@@ -295,10 +300,10 @@ void _Error_Handler(char *file, int line)
   /* User can add his own implementation to report the HAL error return state */
   while(1)
   {
-		#ifdef USE_PRINTF
+		//#ifdef USE_PRINTF
 		printf("file:%s		line:%d\r\n",file,line);
 		HAL_Delay(3000);
-		#endif
+		//#endif
   }
   /* USER CODE END Error_Handler_Debug */
 }
