@@ -133,7 +133,7 @@ int main(void)
   /* USER CODE END 2 */
 
 	printf("IAP_tftpd_init:OK\r\n");
-
+	printf("IAP_tftpd:test APP\r\n");
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	int bootDelay=0x7FFFFFFF;
