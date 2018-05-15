@@ -119,7 +119,6 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-	HAL_Delay(5000);			//waiting
   MX_GPIO_Init();
   MX_DMA_Init();
   //MX_TIM2_Init();
@@ -136,25 +135,32 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	int bootDelay=0x7FFFFFFF;
+	int tickstart=HAL_GetTick();
+	const int bootDelay=5000U;
+	printf("Waiting ... Waiting ...\r\n");
   while (1)
   {
   /* USER CODE END WHILE */
 		MX_LWIP_Process();
   /* USER CODE BEGIN 3 */
-		if(0==IAP_get_flag())
+		if(DOWNLOAD_WAIT==IAP_get_flag())
 		{
-			bootDelay--;
-			
+			//DOWNLOAD_WAIT
+			if(bootDelay<(HAL_GetTick()-tickstart))
+			{
+				printf("Waiting OVER!\r\n");
+				break;
+			}
 		}
-		else if(2==IAP_get_flag())
+		else if(DOWNLOADING==IAP_get_flag())
 		{
+			//DownLoading
+		}
+		else if(DOWNLOAD_OVER==IAP_get_flag())
+		{
+			//Download OVER!
 			break;
-		}
-		if(bootDelay<0)
-		{
-			break;
-		}
+		} 
   }
 	printf("run application!\r\n");
 	RunApplication();
