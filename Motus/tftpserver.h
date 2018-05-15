@@ -104,9 +104,14 @@ typedef enum {
   TFTP_ERR_NO_SUCH_USER,
 } tftp_errorcode;
 
-
+/* Program Download State */
+typedef enum {
+  DOWNLOAD_WAIT,
+  DOWNLOADING,
+  DOWNLOAD_OVER,
+} DownLoad_State;
 void IAP_tftpd_init(void);
 
-char IAP_get_flag(void);
+DownLoad_State IAP_get_flag(void);
 #endif
 
