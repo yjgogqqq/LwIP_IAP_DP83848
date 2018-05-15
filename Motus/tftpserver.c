@@ -51,7 +51,7 @@
 
 #ifdef USE_IAP_TFTP
 
-char IAP_DownloadFlag=0;
+DownLoad_State IAP_DownloadFlag=DOWNLOAD_WAIT;
 /* Private variables ---------------------------------------------------------*/
 static uint32_t Flash_Write_Address;
 static struct udp_pcb *UDPpcb;
@@ -246,7 +246,7 @@ static void IAP_wrq_recv_callback(void *_args, struct udp_pcb *upcb, struct pbuf
     IAP_tftp_cleanup_wr(upcb, args);
     pbuf_free(pkt_buf);
 		
-    IAP_DownloadFlag=2;
+    IAP_DownloadFlag=DOWNLOAD_OVER;
 		printf("IAP_tftp_recv_callback:OVER\r\n");
 #ifdef USE_LCD
     sprintf(message, "%d bytes ",(int)total_count);
@@ -328,7 +328,7 @@ static void IAP_tftp_recv_callback(void *arg, struct udp_pcb *upcb, struct pbuf 
   tftp_opcode op;
   struct udp_pcb *upcb_tftp_data;
   err_t err;
-	IAP_DownloadFlag=1;
+	IAP_DownloadFlag=DOWNLOADING;
 	printf("IAP_tftp_recv_callback:OK\r\n");
 #ifdef USE_LCD
   uint32_t i;
@@ -461,7 +461,7 @@ void IAP_tftpd_init(void)
   * @param  None  
   * @retval None
   */
-char IAP_get_flag()
+DownLoad_State IAP_get_flag()
 {
 	return IAP_DownloadFlag;
 }
