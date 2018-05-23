@@ -62,6 +62,10 @@
 #include "tftpserver.h"
 #include "gpio.h"
 #include "dma.h"
+#include "fatfs.h"
+#include "flash_if.h"
+#include "command.h"
+#include "sdio.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN PV */
@@ -74,12 +78,16 @@ typedef  void (*pFunction)(void);
 pFunction Jump_To_Application;
 uint32_t JumpAddress;
 
+FIL MyFile;     /* File object */
+const char DownloadFile[] = "Motus.bin";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_NVIC_Init(void);
 static void RunApplication(void);
+int SD_UpdateProgram(void);
+int LwIP_TFTP_UpdateProgram(void);
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
@@ -121,45 +129,19 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  //MX_TIM2_Init();
   MX_USART1_UART_Init();
-  MX_LWIP_Init();
   /* Initialize interrupts */
   MX_NVIC_Init();
-  /* USER CODE BEGIN 2 */
-	/* Initialize the TFTP server */
-  IAP_tftpd_init();
-  /* USER CODE END 2 */
-
-	printf("IAP_tftpd_init:OK\r\n");
-
+	HAL_Delay(3000);
+	MX_SDIO_SD_Init();
+	//SD¿¨Update Program
+	SD_UpdateProgram();
+	//LwIP_TFTP_IAP
+	//LwIP_TFTP_UpdateProgram();
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	int tickstart=HAL_GetTick();
-	const int bootDelay=5000U;
-  while (1)
-  {
-  /* USER CODE END WHILE */
-		MX_LWIP_Process();
-  /* USER CODE BEGIN 3 */
-		if(DOWNLOAD_WAIT==IAP_get_flag())
-		{
-			//DOWNLOAD_WAIT
-			if(bootDelay<(HAL_GetTick()-tickstart))
-			{
-				break;
-			}
-		}
-		else if(DOWNLOADING==IAP_get_flag())
-		{
-			//DownLoading
-		}
-		else if(DOWNLOAD_OVER==IAP_get_flag())
-		{
-			//Download OVER!
-			break;
-		} 
-  }
+
+	
 	printf("run application!\r\n");
 	RunApplication();
 	
@@ -289,6 +271,75 @@ static void RunApplication(void)
 				Error_Handler();
 			}
     }
+}
+
+
+int SD_UpdateProgram(void)
+{
+	MX_FATFS_Init();
+	MX_FATFS_Mount();
+	#ifdef USE_PRINTF
+	printf("FATFS_Mount:OK\r\n");
+	#endif
+	if (f_open(&MyFile, DownloadFile,FA_CREATE_NEW|FA_OPEN_ALWAYS|FA_READ) != FR_OK)
+	{
+			#ifdef USE_PRINTF
+			printf("f_open %s:Error\r\n",DownloadFile);
+			#endif
+		return 0;
+	}
+	else
+	{
+		#ifdef USE_PRINTF
+			printf("f_open %s:Error\r\n",DownloadFile);
+		#endif
+		if (COMMAND_DOWNLOAD() != DOWNLOAD_OK)
+		{
+			#ifdef USE_PRINTF
+			printf("COMMAND_DOWNLOAD:Error\r\n");
+			#endif
+		}
+		else
+		{
+			#ifdef USE_PRINTF
+			printf("COMMAND_DOWNLOAD:OK\r\n");
+			#endif
+		}
+	}
+	return 0;
+}
+
+int LwIP_TFTP_UpdateProgram(void)
+{
+	int tickstart=HAL_GetTick();
+	const int bootDelay=5000U;
+	MX_LWIP_Init();
+	/* Initialize the TFTP server */
+  IAP_tftpd_init();
+  while (1)
+  {
+  /* USER CODE END WHILE */
+		MX_LWIP_Process();
+  /* USER CODE BEGIN 3 */
+		if(DOWNLOAD_WAIT==IAP_get_flag())
+		{
+			//DOWNLOAD_WAIT
+			if(bootDelay<(HAL_GetTick()-tickstart))
+			{
+				break;
+			}
+		}
+		else if(DOWNLOADING==IAP_get_flag())
+		{
+			//DownLoading
+		}
+		else if(DOWNLOAD_OVER==IAP_get_flag())
+		{
+			//Download OVER!
+			break;
+		} 
+  }
+	return 0;
 }
 /* USER CODE END 4 */
 

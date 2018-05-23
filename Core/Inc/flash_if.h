@@ -26,6 +26,27 @@
 
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
+/* Error code */
+enum
+{
+  FLASHIF_OK = 0,
+  FLASHIF_ERASEKO,
+  FLASHIF_WRITINGCTRL_ERROR,
+  FLASHIF_WRITING_ERROR,
+  FLASHIF_PROTECTION_ERRROR
+};
+/* protection type */
+enum{
+  FLASHIF_PROTECTION_NONE         = 0,
+  FLASHIF_PROTECTION_PCROPENABLED = 0x1,
+  FLASHIF_PROTECTION_WRPENABLED   = 0x2,
+  FLASHIF_PROTECTION_RDPENABLED   = 0x4,
+};
+/* protection update */
+enum {
+  FLASHIF_WRP_ENABLE,
+  FLASHIF_WRP_DISABLE
+};
 #define USER_FLASH_SIZE   (USER_FLASH_END_ADDRESS - USER_FLASH_FIRST_PAGE_ADDRESS)
 
 /* Exported macro ------------------------------------------------------------*/

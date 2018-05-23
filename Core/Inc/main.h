@@ -65,7 +65,8 @@
   * @brief Uncomment the line below to expanse the "assert_param" macro in the 
   *        HAL drivers code
   */
- #define USE_FULL_ASSERT    1U 
+
+#define USE_FULL_ASSERT    1U 
 #define USE_IAP_TFTP   /* enable IAP using TFTP */
 /* USER CODE BEGIN Private defines */
 /* Flash user area definition *************************************************/   

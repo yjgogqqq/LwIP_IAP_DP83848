@@ -75,6 +75,7 @@ uint8_t BSP_SD_Init(void)
   /* Check if the SD card is plugged in the slot */
   if (BSP_SD_IsDetected() != SD_PRESENT)
   {
+		_Error_Handler(__FILE__, __LINE__);
     return MSD_ERROR;
   }
   /* HAL SD initialization */
@@ -86,8 +87,14 @@ uint8_t BSP_SD_Init(void)
     if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK)
     {
       sd_state = MSD_ERROR;
+			_Error_Handler(__FILE__, __LINE__);
+			
     }
   }
+	else
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
 
   return sd_state;
 }

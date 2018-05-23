@@ -79,6 +79,22 @@ void MX_FATFS_Init(void)
   /* USER CODE END Init */
 }
 
+void MX_FATFS_Mount(void)
+{
+	 if (f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK)
+    {
+			#ifdef USE_PRINTF
+			printf("FATFS_Mount:Error\r\n");
+			#endif
+    }
+		else
+		{
+			#ifdef USE_PRINTF
+			printf("FATFS_Mount:OK\r\n");
+			#endif
+		}
+}
+
 /**
   * @brief  Gets Time from RTC 
   * @param  None
