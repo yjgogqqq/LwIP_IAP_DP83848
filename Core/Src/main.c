@@ -62,24 +62,26 @@
 #include "tftpserver.h"
 #include "gpio.h"
 #include "dma.h"
+#include "can.h"
+#include "tim.h"
+
+#include "ObjDictMaster.h"
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN PV */
 /* Private typedef -----------------------------------------------------------*/
-typedef  void (*pFunction)(void);
+
 
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-pFunction Jump_To_Application;
-uint32_t JumpAddress;
+
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_NVIC_Init(void);
-static void RunApplication(void);
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
@@ -124,48 +126,23 @@ int main(void)
   //MX_TIM2_Init();
   MX_USART1_UART_Init();
   MX_LWIP_Init();
+	MX_CAN1_Init();
+	MX_CAN2_Init();
+	MX_TIM2_Init();
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-	/* Initialize the TFTP server */
-  IAP_tftpd_init();
+ 
   /* USER CODE END 2 */
-
-	printf("IAP_tftpd_init:OK\r\n");
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	int tickstart=HAL_GetTick();
-	const int bootDelay=5000U;
-	printf("Waiting ... Waiting ...\r\n");
   while (1)
   {
   /* USER CODE END WHILE */
 		MX_LWIP_Process();
   /* USER CODE BEGIN 3 */
-		if(DOWNLOAD_WAIT==IAP_get_flag())
-		{
-			//DOWNLOAD_WAIT
-			if(bootDelay<(HAL_GetTick()-tickstart))
-			{
-				printf("Waiting OVER!\r\n");
-				break;
-			}
-		}
-		else if(DOWNLOADING==IAP_get_flag())
-		{
-			//DownLoading
-		}
-		else if(DOWNLOAD_OVER==IAP_get_flag())
-		{
-			//Download OVER!
-			break;
-		} 
   }
-	printf("run application!\r\n");
-	RunApplication();
-	
-	
   /* USER CODE END 3 */
 
 }
@@ -260,38 +237,7 @@ static void MX_NVIC_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/**
-  * @brief  This function runs a previously loaded application
-  * @param  None
-  * @retval None
-  */
-static void RunApplication(void)
-{
-	/* Check if valid stack address (RAM address) then jump to user application */
-    if (((*(__IO uint32_t*)USER_FLASH_FIRST_PAGE_ADDRESS) & 0x2FFE0000 ) == 0x20000000)
-    {
-      /* Jump to user application */
-      JumpAddress = *(__IO uint32_t*) (USER_FLASH_FIRST_PAGE_ADDRESS + 4);
-			printf("JumpAddress:%d\r\n",JumpAddress);
-      Jump_To_Application = (pFunction) JumpAddress;
-			printf("Jump_To_Application:%d\r\n",Jump_To_Application);
-      /* Initialize user application's Stack Pointer */
-      __set_MSP(*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS);
-      Jump_To_Application();
-      /* do nothing */
-      while(1);
-    }
-    else
-    {/* Otherwise, do nothing */
-      /* LED3 (RED) ON to indicate bad software (when not valid stack address) */
-      /* do nothing */
-			
-      while(1)
-			{
-				Error_Handler();
-			}
-    }
-}
+
 /* USER CODE END 4 */
 
 /**

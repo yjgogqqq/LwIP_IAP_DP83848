@@ -26,11 +26,19 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
-
+#include "user_canfestival.h"
+#include "ObjDictMaster.h"
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
+extern CAN_HandleTypeDef 		 hcan1;
+extern CAN_HandleTypeDef 		 hcan2;
+extern CAN_TxHeaderTypeDef   TxHeader;
+extern CAN_RxHeaderTypeDef   RxHeader;
+extern uint8_t               TxData[8];
+extern uint8_t               RxData[8];
+extern uint32_t              TxMailbox;
 /* Private function prototypes -----------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
@@ -117,6 +125,7 @@ void SysTick_Handler(void)
 {
   /* Update the LocalTime by adding 1 ms each SysTick interrupt */
   HAL_IncTick();
+	timerForCan();
 }
 
 /**
@@ -136,6 +145,44 @@ void EXTI15_10_IRQHandler(void)
 /*  file (startup_stm32f4xx.s).                                               */
 /******************************************************************************/
 
+/**
+* @brief  This function handles CAN1 RX0 interrupt request.
+* @param  None
+* @retval None
+*/
+void CAN1_RX0_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan1);
+}
+
+void CAN2_RX0_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan2);
+}
+/**
+  * @brief  Rx Fifo 0 message pending callback
+  * @param  hcan: pointer to a CAN_HandleTypeDef structure that contains
+  *         the configuration information for the specified CAN.
+  * @retval None
+  */
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	static Message m = Message_Initializer;		// contain a CAN message
+  /* Get RX message */
+  if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
+  {
+    /* Reception Error */
+    Error_Handler();
+  }
+	else
+	{
+		m.cob_id=RxHeader.StdId;
+		m.rtr=RxHeader.RTR;
+		m.len=RxHeader.DLC;
+		memcpy(m.data,RxData,RxHeader.DLC);
+		canDispatch(&ObjDictMaster_Data, &m);
+	}
+}
 /**
   * @brief  This function handles PPP interrupt request.
   * @param  None
