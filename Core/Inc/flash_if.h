@@ -51,7 +51,7 @@ enum {
 
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
-uint32_t FLASH_If_Write(__IO uint32_t* Address, uint32_t* Data, uint16_t DataLength);
+uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint16_t DataLength);
 int8_t FLASH_If_Erase(uint32_t StartSector);
 void FLASH_If_Init(void);
 

@@ -121,12 +121,14 @@ uint32_t COMMAND_DOWNLOAD(void) {
 		return DOWNLOAD_FILE_FAIL;
 	}
 	
-	if (finfno.fsize < (FLASH_SIZE - IAP_SIZE)) {
-			#ifdef USE_PRINTF
-			printf("finfno.fsize:%ld\r\n",finfno.fsize);
-			#endif
+	/* init flash */
+  FLASH_If_Init();
+	
+	if (finfno.fsize < (FLASH_SIZE - IAP_SIZE)) { 
+		
 		/* Erase necessary page to download image */
 		if (FLASH_If_Erase(USER_FLASH_FIRST_PAGE_ADDRESS) != 0) {
+			_Error_Handler(__FILE__, __LINE__);
 			return DOWNLOAD_ERASE_FAIL;
 		}
 
@@ -156,6 +158,7 @@ void COMMAND_JUMP(void) {
 uint32_t COMMAND_ProgramFlashMemory(void) {
 	__IO uint32_t read_size = 0x00, tmp_read_size = 0x00;
 	uint32_t read_flag = 1;
+	uint16_t count=0;
 
 	/* Erase address init */
 	LastPGAddress = USER_FLASH_FIRST_PAGE_ADDRESS;
@@ -166,6 +169,7 @@ uint32_t COMMAND_ProgramFlashMemory(void) {
 		/* Read maximum "BUFFERSIZE" Kbyte from the selected file  */
 		if (f_read(&MyFile, RAMBuf, BUFFERSIZE, (UINT*) &read_size)
 				!= FR_OK) {
+				_Error_Handler(__FILE__, __LINE__);
 			return DOWNLOAD_FILE_FAIL;
 		}
 
@@ -176,24 +180,33 @@ uint32_t COMMAND_ProgramFlashMemory(void) {
 		if (tmp_read_size < BUFFERSIZE) {
 			read_flag = 0;
 		}
-
+		
+		count = (read_size)/4;
+    if ((read_size%4)!=0) 
+		{
+			count++;
+			
+		}
+		printf("count is %d\r\n",count);
 		/* Program flash memory */
-		if (FLASH_If_Write(&LastPGAddress, (uint32_t*) RAMBuf, read_size)
+		if (FLASH_If_Write(&LastPGAddress, (uint32_t*) RAMBuf, count)
 				!= FLASHIF_OK) {
+					_Error_Handler(__FILE__, __LINE__);
 			return DOWNLOAD_WRITE_FAIL;
 		}
 
 		/* Update last programmed address value */
 		LastPGAddress = LastPGAddress + tmp_read_size;
 	}
-	int ret=0;
-	ret =f_unlink (DownloadFile);
-	if(ret !=FR_OK)
-	{
-			#ifdef USE_PRINTF
-				printf("f_unlink:Error,%d\r\n",ret);
-			#endif
-	}
+	f_close(&MyFile);
+//	int ret=0;
+//	ret =f_unlink (DownloadFile);
+//	if(ret !=FR_OK)
+//	{
+//			#ifdef USE_PRINTF
+//				printf("f_unlink:Error,%d\r\n",ret);
+//			#endif
+//	}
 	return DOWNLOAD_OK;
 }
 

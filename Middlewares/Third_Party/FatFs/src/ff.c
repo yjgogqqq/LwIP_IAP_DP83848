@@ -3314,11 +3314,8 @@ FRESULT f_open (
 
 	/* Get logical drive */
 	mode &= _FS_READONLY ? FA_READ : FA_READ | FA_WRITE | FA_CREATE_ALWAYS | FA_CREATE_NEW | FA_OPEN_ALWAYS | FA_OPEN_APPEND | FA_SEEKEND;
-	printf("find_volume:1\r\n");
 	res = find_volume(&path, &fs, mode);
-	printf("find_volume:2\r\n");
 	if (res == FR_OK) {
-		printf("find_volume:OK\r\n");
 		dj.obj.fs = fs;
 		INIT_NAMBUF(fs);
 		res = follow_path(&dj, path);	/* Follow the file path */
@@ -3487,10 +3484,7 @@ FRESULT f_open (
 
 		FREE_NAMBUF();
 	}
-	else
-	{
-		printf("find_volume:error\r\n");
-	}
+
 	if (res != FR_OK) fp->obj.fs = 0;	/* Invalidate file object on error */
 
 	LEAVE_FF(fs, res);

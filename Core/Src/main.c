@@ -278,32 +278,25 @@ int SD_UpdateProgram(void)
 {
 	MX_FATFS_Init();
 	MX_FATFS_Mount();
-	#ifdef USE_PRINTF
-	printf("FATFS_Mount:OK\r\n");
-	#endif
-	if (f_open(&MyFile, DownloadFile,FA_CREATE_NEW|FA_OPEN_ALWAYS|FA_READ) != FR_OK)
+	if (f_open(&MyFile, DownloadFile,FA_READ) != FR_OK)
 	{
-			#ifdef USE_PRINTF
-			printf("f_open %s:Error\r\n",DownloadFile);
-			#endif
+		#ifdef USE_PRINTF
+		printf("f_open: %s Error\r\n",DownloadFile);;
+		#endif
 		return 0;
 	}
 	else
 	{
-		#ifdef USE_PRINTF
-			printf("f_open %s:Error\r\n",DownloadFile);
-		#endif
 		if (COMMAND_DOWNLOAD() != DOWNLOAD_OK)
 		{
-			#ifdef USE_PRINTF
-			printf("COMMAND_DOWNLOAD:Error\r\n");
-			#endif
+			_Error_Handler(__FILE__, __LINE__);
 		}
 		else
 		{
 			#ifdef USE_PRINTF
-			printf("COMMAND_DOWNLOAD:OK\r\n");
+			printf("Program Update OK\r\n");;
 			#endif
+			return 0;
 		}
 	}
 	return 0;
@@ -355,10 +348,10 @@ void _Error_Handler(char *file, int line)
   /* User can add his own implementation to report the HAL error return state */
   while(1)
   {
-		//#ifdef USE_PRINTF
+		#ifdef USE_PRINTF
 		printf("file:%s		line:%d\r\n",file,line);
 		HAL_Delay(3000);
-		//#endif
+		#endif
   }
   /* USER CODE END Error_Handler_Debug */
 }
