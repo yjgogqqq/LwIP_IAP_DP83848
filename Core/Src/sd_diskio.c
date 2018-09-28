@@ -150,10 +150,6 @@ DSTATUS SD_initialize(BYTE lun)
   {
     Stat = SD_CheckStatus(lun);
   }
-	else
-	{
-		_Error_Handler(__FILE__, __LINE__);
-	}
 
 #else
   Stat = SD_CheckStatus(lun);

@@ -87,8 +87,6 @@ uint8_t BSP_SD_Init(void)
     if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK)
     {
       sd_state = MSD_ERROR;
-			_Error_Handler(__FILE__, __LINE__);
-			
     }
   }
 	else

@@ -86,9 +86,8 @@ int8_t FLASH_If_Erase(uint32_t StartSector)
   */
 uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint16_t DataLength)
 {
-
-  uint32_t i = 0;
-
+	uint32_t i = 0;
+	HAL_FLASH_Unlock();
   for (i = 0; (i < DataLength) && (*FlashAddress <= (USER_FLASH_END_ADDRESS-4)); i++)
   {
     /* Device voltage range supposed to be [2.7V to 3.6V], the operation will
@@ -110,7 +109,7 @@ uint32_t FLASH_If_Write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint16_t Da
       return (1);
     }
   }
-
+	HAL_FLASH_Lock();
   return (0);
 }
 

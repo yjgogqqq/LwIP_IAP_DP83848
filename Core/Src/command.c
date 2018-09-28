@@ -116,16 +116,11 @@ uint32_t COMMAND_DOWNLOAD(void) {
 	FILINFO finfno = { 0 };
 
 	if (f_stat(DownloadFile, &finfno) != FR_OK) {
-		/* 'STM32.TXT' file Open for write Error */
 		 _Error_Handler(__FILE__, __LINE__);
 		return DOWNLOAD_FILE_FAIL;
 	}
-	
-	/* init flash */
-  FLASH_If_Init();
-	
-	if (finfno.fsize < (FLASH_SIZE - IAP_SIZE)) { 
-		
+	FLASH_If_Init();
+	if (finfno.fsize < (FLASH_SIZE - IAP_SIZE)) {
 		/* Erase necessary page to download image */
 		if (FLASH_If_Erase(USER_FLASH_FIRST_PAGE_ADDRESS) != 0) {
 			_Error_Handler(__FILE__, __LINE__);
@@ -162,51 +157,48 @@ uint32_t COMMAND_ProgramFlashMemory(void) {
 
 	/* Erase address init */
 	LastPGAddress = USER_FLASH_FIRST_PAGE_ADDRESS;
-
 	/* While file still contain data */
 	while (read_flag == 1) {
 
-		/* Read maximum "BUFFERSIZE" Kbyte from the selected file  */
+		/* Read maximum "BUFFERSIZE" byte from the selected file  */
 		if (f_read(&MyFile, RAMBuf, BUFFERSIZE, (UINT*) &read_size)
 				!= FR_OK) {
 				_Error_Handler(__FILE__, __LINE__);
 			return DOWNLOAD_FILE_FAIL;
 		}
-
 		/* Temp variable */
 		tmp_read_size = read_size;
 
-		/* The read data < "BUFFERSIZE" Kbyte */
+		/* The read data < "BUFFERSIZE" byte */
 		if (tmp_read_size < BUFFERSIZE) {
 			read_flag = 0;
 		}
-		
+		/* Flash write 4 bytes */
 		count = (read_size)/4;
     if ((read_size%4)!=0) 
 		{
 			count++;
 			
 		}
-		printf("count is %d\r\n",count);
-		/* Program flash memory */
+		/* Program flash memory  every time*/
 		if (FLASH_If_Write(&LastPGAddress, (uint32_t*) RAMBuf, count)
 				!= FLASHIF_OK) {
 					_Error_Handler(__FILE__, __LINE__);
 			return DOWNLOAD_WRITE_FAIL;
 		}
-
-		/* Update last programmed address value */
-		LastPGAddress = LastPGAddress + tmp_read_size;
 	}
+	
+	/* Close the program file */
 	f_close(&MyFile);
-//	int ret=0;
-//	ret =f_unlink (DownloadFile);
-//	if(ret !=FR_OK)
-//	{
-//			#ifdef USE_PRINTF
-//				printf("f_unlink:Error,%d\r\n",ret);
-//			#endif
-//	}
+	/* Delete the program file*/
+	int ret=0;
+	ret =f_unlink (DownloadFile);
+	if(ret !=FR_OK)
+	{
+			#ifdef USE_PRINTF
+				printf("f_unlink:Error,%d\r\n",ret);
+			#endif
+	}
 	return DOWNLOAD_OK;
 }
 

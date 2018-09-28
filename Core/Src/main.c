@@ -79,7 +79,7 @@ pFunction Jump_To_Application;
 uint32_t JumpAddress;
 
 FIL MyFile;     /* File object */
-const char DownloadFile[] = "Motus.bin";
+const char DownloadFile[] ="motus.bin";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,31 +106,18 @@ int LwIP_TFTP_UpdateProgram(void);
 //¾«¼õLwIP¼°HAL_DRIVERºó		code=55616,RO-data=1068,RW-data=224,ZI-data=27868
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-	
-  /* USER CODE END 1 */
-
   /* MCU Configuration----------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
+	
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART1_UART_Init();
-  /* Initialize interrupts */
   MX_NVIC_Init();
 	HAL_Delay(3000);
 	MX_SDIO_SD_Init();
@@ -256,8 +243,9 @@ static void RunApplication(void)
       Jump_To_Application = (pFunction) JumpAddress;
 			printf("Jump_To_Application:%d\r\n",Jump_To_Application);
       /* Initialize user application's Stack Pointer */
-      __set_MSP(*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS);
-      Jump_To_Application();
+      //__set_MSP(*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS);
+      __set_MSP((*(__IO uint32_t*) USER_FLASH_FIRST_PAGE_ADDRESS));
+			Jump_To_Application();
       /* do nothing */
       while(1);
     }
